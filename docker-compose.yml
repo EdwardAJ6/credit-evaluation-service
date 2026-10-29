@@ -1,9 +1,14 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      target: dev
     ports:
       - "8000:8000"
-    volumes:
-      - .:/app
     environment:
-      - DATABASE_URL=sqlite:///./credit_eval.db
+      API_KEY: dev-api-key # local development only; never reuse it in a deployment
+    volumes:
+      - data:/data
+
+volumes:
+  data:
