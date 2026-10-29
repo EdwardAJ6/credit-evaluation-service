@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format
+        run: ruff format --check .
+
+      - name: Tests with branch coverage
+        run: coverage run --branch --source=app -m pytest
+
+      - name: Coverage summary
+        run: coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Coverage gate (total >= 90%)
+        run: coverage report --show-missing --fail-under=90
+
+      - name: Coverage gate (app/strategies = 100%)
+        run: coverage report --include='app/strategies/*' --fail-under=100
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build dev image (the one docker compose uses)
+        run: docker build --target dev -t credit-eval:dev .
+
+      - name: Build runtime image
+        run: docker build -t credit-eval:runtime .
+
+      - name: Start runtime container
+        run: docker run -d --name api -p 8000:8000 -e API_KEY=ci-smoke-key -v data:/data credit-eval:runtime
+
+      - name: Smoke test
+        run: |
+          curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://localhost:8000/health
+          post() {
+            curl -sS -o /dev/null -w '%{http_code}' "$@" \
+              -H 'content-type: application/json' \
+              -d '{"amount": 2400000, "monthly_income": 1500000, "employment_months": 24, "external_score": 750, "product": "PHONE"}' \
+              http://localhost:8000/applications
+          }
+          test "$(post)" = 401
+          test "$(post -H 'X-API-Key: ci-smoke-key')" = 201
+          test "$(docker exec api id -u)" != 0
+
+      - name: Container logs
+        if: failure()
+        run: docker logs api
