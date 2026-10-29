@@ -13,3 +13,9 @@ venv/
 .DS_Store
 .idea/
 .vscode/
+
+# Terraform: local state and real variables can hold secrets
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars

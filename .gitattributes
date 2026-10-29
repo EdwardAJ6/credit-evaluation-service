@@ -1,0 +1,2 @@
+# The EC2 boot script runs on Linux: keep LF even on Windows checkouts (core.autocrlf).
+*.tftpl text eol=lf

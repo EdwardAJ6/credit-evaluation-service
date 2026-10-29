@@ -1,0 +1,17 @@
+#!/bin/bash
+# Runs once at first boot: builds the runtime image from the repository and
+# starts it with the API key read from SSM Parameter Store.
+set -euo pipefail
+
+dnf install -y docker git
+systemctl enable --now docker
+
+git clone --depth 1 --branch "${git_ref}" "${repo_url}" /opt/app
+docker build -t credit-eval /opt/app # the last stage is the minimal runtime image
+
+API_KEY=$(aws ssm get-parameter --region "${region}" --name "${api_key_param}" \
+  --with-decryption --query Parameter.Value --output text)
+
+# SQLite lives in the "data" volume on the instance's encrypted EBS disk.
+docker run -d --name api --restart unless-stopped -p 80:8000 \
+  -e API_KEY="$API_KEY" -v data:/data credit-eval
